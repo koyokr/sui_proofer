@@ -1,16 +1,24 @@
-# sample
+# Sui Proofer
 
-A new Flutter project.
+SMS verification overlay for incoming calls.
 
-## Getting Started
+## Usage
 
-This project is a starting point for a Flutter application.
+1. Install and grant permissions (phone, SMS, overlay)
+2. Receive incoming call → overlay appears
+3. SMS with Sui address arrives → verification runs automatically
+4. Green = verified, Red = failed, Gray = waiting
 
-A few resources to get you started if this is your first Flutter project:
+## Build
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```bash
+flutter pub get
+flutter build apk --debug
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Development
+
+```bash
+dart fix
+flutter analyze
+```

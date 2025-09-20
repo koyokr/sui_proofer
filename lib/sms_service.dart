@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:smswatcher/smswatcher.dart';
 import 'config/app_constants.dart';
 import 'utils/phone_number_utils.dart';
+import 'services/submitter_service.dart';
 
 class SuiVerificationResult {
   final bool isValid;
@@ -79,28 +80,21 @@ class SmsService {
   /// Get SMS history for specific phone number (only from sender to me)
   Future<List<SmsMessage>> getSmsHistory(String phoneNumber, {int limit = AppConstants.defaultHistoryLimit}) async {
     try {
-      log('[SMS Service] Getting SMS history from caller: $phoneNumber');
 
       // Get all SMS with smswatcher
       final smswatcher = Smswatcher();
       final allSms = await smswatcher.getAllSMS();
 
       if (allSms == null || allSms.isEmpty) {
-        log('[SMS Service] No SMS found');
         return [];
       }
 
-      final normalizedTarget = PhoneNumberUtils.normalize(phoneNumber);
-      log('[SMS Service] Normalized target: $normalizedTarget');
 
       // Filter only SMS from that number to me (sender only)
       final filteredSms = allSms.where((sms) {
         final sender = sms['sender'] ?? sms['address'] ?? '';
         final isMatch = PhoneNumberUtils.isMatching(sender, phoneNumber);
 
-        if (isMatch) {
-          log('[SMS Service] Found matching SMS from: $sender');
-        }
 
         return isMatch;
       }).toList();
@@ -114,10 +108,9 @@ class SmsService {
 
       final messages = filteredSms.take(limit).map((sms) => SmsMessage.fromSmsWatcher(sms)).toList();
 
-      log('[SMS Service] Found ${messages.length} messages from caller $phoneNumber');
       return messages;
     } catch (e) {
-      log('[SMS Service] Error getting SMS history: $e');
+      log('[SMS] History error: $e');
       return [];
     }
   }
@@ -125,7 +118,6 @@ class SmsService {
   /// Get all SMS (recent first)
   Future<List<SmsMessage>> getAllSms({int limit = AppConstants.defaultSmsLimit}) async {
     try {
-      log('[SMS Service] Getting all SMS messages');
 
       final smswatcher = Smswatcher();
       final allSms = await smswatcher.getAllSMS();
@@ -134,17 +126,15 @@ class SmsService {
           .map((sms) => SmsMessage.fromSmsWatcher(sms))
           .toList();
 
-      log('[SMS Service] Found ${messages.length} total messages');
       return messages;
     } catch (e) {
-      log('[SMS Service] Error getting all SMS: $e');
+      log('[SMS] Get all error: $e');
       return [];
     }
   }
 
   /// Extract Sui object addresses with timestamps from SMS
   List<Map<String, String>> extractSuiAddressesFromText(String text) {
-    log('[SMS Service] Extracting Sui addresses with timestamps from text: $text');
 
     // New pattern: 0x[a-fA-F0-9]{64}_\d+ (no parentheses)
     final suiPattern = RegExp(
@@ -173,18 +163,14 @@ class SmsService {
     }
 
     final result = uniqueData.values.toList();
-    log('[SMS Service] Extracted ${result.length} Sui address-timestamp pairs: $result');
     return result;
   }
 
   /// Verify Sui object address by calling Sui API with timestamp matching
   Future<SuiVerificationResult> verifySuiAddressWithDetails(String address, String timestamp) async {
     try {
-      log('[SMS Service] ===== STARTING VERIFICATION =====');
-      log('[SMS Service] Verifying Sui address: $address');
-      log('[SMS Service] Target timestamp: $timestamp');
-
-      const expectedSubmitter = '0x8b89d808ce6e1c5a560354c264f7ff4166e05d138b8534fcae78058acfe298f4';
+      final submitterService = SubmitterService();
+      final expectedSubmitter = await submitterService.getSubmitter();
 
       final response = await http.post(
         Uri.parse('https://fullnode.testnet.sui.io'),
@@ -201,7 +187,7 @@ class SmsService {
       );
 
       if (response.statusCode != 200) {
-        log('[SMS Service] HTTP error ${response.statusCode}: ${response.body}');
+        log('[SMS] HTTP error: ${response.statusCode}');
         return SuiVerificationResult(isValid: false);
       }
 
@@ -209,41 +195,34 @@ class SmsService {
 
       // Check if response has expected structure
       if (!jsonData.containsKey('result')) {
-        log('[SMS Service] No result field in response');
         return SuiVerificationResult(isValid: false);
       }
 
       final result = jsonData['result'] as Map<String, dynamic>?;
       if (result == null || !result.containsKey('data')) {
-        log('[SMS Service] No data field in result');
         return SuiVerificationResult(isValid: false);
       }
 
       final data = result['data'] as Map<String, dynamic>?;
       if (data == null || !data.containsKey('content')) {
-        log('[SMS Service] No content field in data');
         return SuiVerificationResult(isValid: false);
       }
 
       final content = data['content'] as Map<String, dynamic>?;
       if (content == null || !content.containsKey('fields')) {
-        log('[SMS Service] No fields field in content');
         return SuiVerificationResult(isValid: false);
       }
 
       final fields = content['fields'] as Map<String, dynamic>?;
       if (fields == null || !fields.containsKey('forms')) {
-        log('[SMS Service] No forms field in fields');
         return SuiVerificationResult(isValid: false);
       }
 
       final forms = fields['forms'] as List<dynamic>?;
       if (forms == null || forms.isEmpty) {
-        log('[SMS Service] Forms list is empty or null');
         return SuiVerificationResult(isValid: false);
       }
 
-      log('[SMS Service] Found ${forms.length} forms in response');
 
       // Find form with matching timestamp (search from end for latest entries)
       Map<String, dynamic>? matchingForm;
@@ -254,9 +233,7 @@ class SmsService {
           final fields = formMap['fields'] as Map<String, dynamic>?;
           if (fields != null && fields.containsKey('timestamp')) {
             final formTimestamp = fields['timestamp']?.toString();
-            log('[SMS Service] Checking form $i: timestamp=$formTimestamp vs target=$timestamp');
             if (formTimestamp == timestamp) {
-              log('[SMS Service] ✅ FOUND MATCHING FORM at index $i');
               matchingForm = fields;
               break;
             }
@@ -265,20 +242,17 @@ class SmsService {
       }
 
       if (matchingForm == null) {
-        log('[SMS Service] No form found with matching timestamp: $timestamp');
         return SuiVerificationResult(isValid: false);
       }
 
       // Check submitter in matching form
       if (!matchingForm.containsKey('submitter')) {
-        log('[SMS Service] Matching form has no submitter field');
         return SuiVerificationResult(isValid: false);
       }
 
       final submitter = matchingForm['submitter'] as String?;
       final isValid = submitter == expectedSubmitter;
 
-      log('[SMS Service] Submitter: $submitter, Expected: $expectedSubmitter, Valid: $isValid');
 
       // Extract additional form data
       final interestedProduct = matchingForm['interested_product']?.toString();
@@ -296,8 +270,12 @@ class SmsService {
       );
 
     } catch (e) {
-      log('[SMS Service] Error verifying Sui address: $e');
-      return SuiVerificationResult(isValid: false);
+      log('[SMS] Verify error: $e');
+      return SuiVerificationResult(
+        isValid: false,
+        objectAddress: address,
+        submitterAddress: null,
+      );
     }
   }
 
@@ -312,27 +290,22 @@ class SmsService {
   void _startSmsMonitoring() {
     if (_smsWatcherSubscription != null) return;
 
-    log('[SMS Service] Starting SMS monitoring with SmsWatcher');
 
     final smswatcher = Smswatcher();
     _smsWatcherSubscription = smswatcher.getStreamOfSMS().listen((smsData) {
       try {
-        log('[SMS Service] New SMS received: $smsData');
 
         final message = SmsMessage.fromSmsWatcher(smsData);
 
         // Sui address extraction and logging
         final addressData = extractSuiAddressesFromText(message.body);
         if (addressData.isNotEmpty) {
-          log('[SMS Sui] Found Sui address-timestamp pairs in SMS from ${message.address}:');
-          for (final data in addressData) {
-            log('[SMS Sui] - Address: ${data['address']}, Timestamp: ${data['timestamp']}');
-          }
+          log('[SMS] Found ${addressData.length} Sui addresses');
         }
 
         _smsStreamController?.add(message);
       } catch (e) {
-        log('[SMS Service] Error processing received SMS: $e');
+        log('[SMS] Process error: $e');
       }
     });
   }
@@ -344,7 +317,6 @@ class SmsService {
     _smsStreamController?.close();
     _smsStreamController = null;
     _smsStream = null;
-    log('[SMS Service] SMS monitoring stopped');
   }
 
   void dispose() {

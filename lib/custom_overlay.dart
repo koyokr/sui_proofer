@@ -55,7 +55,6 @@ class _CustomOverlayState extends State<CustomOverlay> {
     _initializeSmsService();
 
     SystemAlertWindow.overlayListener.listen((event) {
-      log("$event in overlay");
       if (event is bool) {
         setState(() {
           update = event;
@@ -74,7 +73,6 @@ class _CustomOverlayState extends State<CustomOverlay> {
 
         // Start verification timer
         _startVerificationTimer();
-        log("Phone number updated: $_currentPhoneNumber");
       } else if (event is String && event.startsWith('SMS_STATUS:')) {
         // Update SMS verification status
         final status = event.replaceFirst('SMS_STATUS:', '');
@@ -87,26 +85,20 @@ class _CustomOverlayState extends State<CustomOverlay> {
             _verificationResult = null; // Clear verification result
           }
         });
-        log("SMS status updated: $status (verification state: $_verificationState)");
       }
     });
   }
 
   void _initializeSmsService() {
-    log("[Overlay SMS] Starting SMS service initialization");
 
     // Start real-time SMS detection (display simply in UI)
     _smsService.smsStream.listen(
       (sms) async {
-        log("[Overlay SMS] Real-time SMS received from ${sms.address}: ${sms.body}");
 
         // Sui address extraction and logging
         final addressData = _smsService.extractSuiAddressesFromText(sms.body);
         if (addressData.isNotEmpty) {
-          log("[Overlay SMS Sui] Found Sui address-timestamp pairs in SMS:");
-          for (final data in addressData) {
-            log("[Overlay SMS Sui] - Address: ${data['address']}, Timestamp: ${data['timestamp']}");
-          }
+          log('[Overlay] Found ${addressData.length} addresses');
         }
 
         // Check if current call is ongoing and SMS is from that number
@@ -115,24 +107,21 @@ class _CustomOverlayState extends State<CustomOverlay> {
 
           // Stop additional SMS processing if already verified
           if (_verificationState == VerificationState.verified) {
-            log("[Overlay SMS] ⚠️ Already verified - stopping SMS processing (from: ${sms.address})");
             return;
           }
 
           // Prevent duplicate processing if SMS is being processed
           if (_isProcessingSms) {
-            log("[Overlay SMS] ⚠️ SMS processing - preventing duplicate processing (from: ${sms.address})");
             return;
           }
 
-          log("[Overlay SMS] SMS matched for current call from: ${sms.address}");
           setState(() {
             _lastSmsAddressData = addressData; // Store Sui address data
           });
 
           // Verify each Sui address if addresses are included
           if (addressData.isNotEmpty) {
-            log("[Overlay SMS] 🔗 Found ${addressData.length} Sui address-timestamp pairs - starting verification");
+            log('[Overlay] Verifying ${addressData.length} addresses');
 
             // Set SMS processing start flag
             _isProcessingSms = true;
@@ -159,37 +148,30 @@ class _CustomOverlayState extends State<CustomOverlay> {
               // Cancel timer on verification success
               _cancelVerificationTimer();
 
-              log("[Overlay SMS] ✅ Sui address verification complete - final approval");
-              log("[Overlay SMS] 🚫 Setting stop additional SMS processing due to verification completion");
+              log('[Overlay] Verification complete');
 
               // Notify verification status to PhoneService singleton instance
               final phoneServiceInstance = PhoneService.getInstance();
               phoneServiceInstance.updateToVerifiedCall(_currentPhoneNumber);
-              debugPrint('[Overlay] ★★★ Verification status delivery to PhoneService completed (number: $_currentPhoneNumber) ★★★');
 
               // Also notify main app of SMS reception status
               SystemAlertWindow.sendMessageToOverlay('SMS_STATUS:Received');
-              log("[Overlay SMS] Real-time SMS verification completed for: ${sms.address}");
             } else {
-              log("[Overlay SMS] ❌ All Sui address verification failed - maintaining verification state");
               // On failure, don't immediately change to failed state, let timer handle it
             }
 
             // Clear SMS processing completion flag
             _isProcessingSms = false;
           } else {
-            log("[Overlay SMS] ❌ SMS without Sui address-timestamp pairs - maintaining verification state");
           }
         } else {
-          log("[Overlay SMS] SMS from ${sms.address} doesn't match current call $_currentPhoneNumber");
         }
       },
       onError: (error) {
-        log("[Overlay SMS] SMS stream error: $error");
+        log('[Overlay] SMS error: $error');
       },
     );
 
-    log("[Overlay SMS] SMS service initialized for real-time detection");
   }
 
 
@@ -198,14 +180,13 @@ class _CustomOverlayState extends State<CustomOverlay> {
   void _startVerificationTimer() {
     _verificationTimer?.cancel(); // Cancel existing timer
 
-    log("[Timer] Starting ${AppConstants.verificationTimeout.inSeconds}-second verification timer");
     _verificationTimer = Timer(AppConstants.verificationTimeout, () {
       // Handle as failure if not verified even after timer expiration
       if (_verificationState == VerificationState.pending) {
         setState(() {
           _verificationState = VerificationState.failed;
         });
-        log("[Timer] ❌ Verification timeout - changing to failed state");
+        log('[Timer] Timeout');
       }
     });
   }
@@ -214,17 +195,16 @@ class _CustomOverlayState extends State<CustomOverlay> {
   void _cancelVerificationTimer() {
     _verificationTimer?.cancel();
     _verificationTimer = null;
-    log("[Timer] Verification timer cancelled");
   }
 
 
   Widget _buildDetailCard(String label, String value, Color valueColor, IconData icon) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(bottom: AppConstants.marginSmall),
+      padding: EdgeInsets.all(AppConstants.cardPadding),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.overlayBackground.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(AppConstants.cardPadding),
         border: Border.all(
           color: valueColor.withValues(alpha: 0.3),
           width: 1,
@@ -233,8 +213,8 @@ class _CustomOverlayState extends State<CustomOverlay> {
       child: Row(
         children: [
           Container(
-            width: 32,
-            height: 32,
+            width: AppConstants.mediumIconSize,
+            height: AppConstants.mediumIconSize,
             decoration: BoxDecoration(
               color: valueColor.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
@@ -242,10 +222,10 @@ class _CustomOverlayState extends State<CustomOverlay> {
             child: Icon(
               icon,
               color: valueColor,
-              size: 16,
+              size: AppConstants.smallIconSize,
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: AppConstants.cardPadding),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -253,8 +233,8 @@ class _CustomOverlayState extends State<CustomOverlay> {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: AppConstants.captionTextSize,
+                    color: AppColors.textPrimary.withValues(alpha: 0.7),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -262,7 +242,7 @@ class _CustomOverlayState extends State<CustomOverlay> {
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppConstants.captionTextSize + 1,
                     color: valueColor,
                     fontWeight: FontWeight.w600,
                   ),
@@ -270,6 +250,79 @@ class _CustomOverlayState extends State<CustomOverlay> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverlayHeader() {
+    return Container(
+      padding: EdgeInsets.all(AppConstants.sectionPadding),
+      decoration: BoxDecoration(
+        color: AppColors.overlayBackground.withValues(alpha:0.2),
+        borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
+        border: Border.all(
+          color: AppColors.textPrimary.withValues(alpha:0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: AppConstants.largeIconSize,
+                height: AppConstants.largeIconSize,
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [_verificationState.accentColor, _verificationState.accentColor.withValues(alpha: 0.7)],
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _verificationState.accentColor.withValues(alpha: 0.6),
+                      blurRadius: 15,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  _verificationState.icon,
+                  color: AppColors.textPrimary,
+                  size: 30,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: AppConstants.defaultPadding),
+          Text(
+            _verificationState.titleText,
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: AppConstants.titleTextSize,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: AppConstants.marginSmall + 2),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.textPrimary.withValues(alpha:0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.textPrimary.withValues(alpha:0.2)),
+            ),
+            child: Text(
+              _currentPhoneNumber ?? "Checking phone number...",
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: AppConstants.phoneTextSize,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2,
+              ),
             ),
           ),
         ],
@@ -296,33 +349,31 @@ class _CustomOverlayState extends State<CustomOverlay> {
     return GestureDetector(
       // Close when touching outside area
       onTap: () {
-        log('[Overlay] Outside area touch - closing overlay');
         callBackFunction("Outside Close");
         SystemAlertWindow.closeSystemWindow(prefMode: prefMode);
       },
       child: Container(
         width: double.infinity,
         height: double.infinity,
-        color: Colors.black.withValues(alpha: 0.8), // Darker background
+        color: AppColors.overlayBackground.withValues(alpha: 0.8),
         child: SafeArea(
           child: GestureDetector(
             // Don't close when touching internal container
             onTap: () {
-              log('[Overlay] Internal container touch - maintain');
             },
             child: AnimatedContainer(
               duration: AppConstants.overlayAnimationDuration,
               curve: Curves.easeInOut,
               width: double.infinity,
-              height: double.infinity, // Full screen
-              margin: const EdgeInsets.all(20),
+              height: double.infinity,
+              margin: EdgeInsets.all(AppConstants.headingTextSize),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: _verificationState.gradientColors,
                 ),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(AppConstants.marginLarge),
                 border: Border.all(
                   color: _verificationState.accentColor.withValues(alpha: 0.5),
                   width: 2,
@@ -344,76 +395,7 @@ class _CustomOverlayState extends State<CustomOverlay> {
                       child: Column(
                         children: [
                           // Header
-                          Container(
-                            padding: const EdgeInsets.all(18),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha:0.2),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha:0.1),
-                                width: 1,
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 60,
-                                      height: 60,
-                                      decoration: BoxDecoration(
-                                        gradient: RadialGradient(
-                                          colors: [_verificationState.accentColor, _verificationState.accentColor.withValues(alpha: 0.7)],
-                                        ),
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: _verificationState.accentColor.withValues(alpha: 0.6),
-                                            blurRadius: 15,
-                                            spreadRadius: 2,
-                                          ),
-                                        ],
-                                      ),
-                                      child: Icon(
-                                        _verificationState.icon,
-                                        color: Colors.white,
-                                        size: 30,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  _verificationState.titleText,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha:0.1),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: Colors.white.withValues(alpha:0.2)),
-                                  ),
-                                  child: Text(
-                                    _currentPhoneNumber ?? "Checking phone number...",
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 1.2,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          _buildOverlayHeader(),
                           const SizedBox(height: 8),
 
                           // SMS verification section
@@ -529,7 +511,6 @@ class _CustomOverlayState extends State<CustomOverlay> {
                                       // Close button (center)
                                       GestureDetector(
                                         onTap: () {
-                                          log('[Overlay] Close button clicked - closing overlay');
                                           callBackFunction("Close Button");
                                           SystemAlertWindow.closeSystemWindow(prefMode: prefMode);
                                         },
