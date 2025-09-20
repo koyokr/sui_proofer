@@ -1,5 +1,5 @@
-name: sample
-description: "A new Flutter project."
+name: sui_proofer
+description: "Real-time SMS verification system for call security."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -36,7 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # Phone state monitoring and call detection
-  # phone_state: ^3.0.0 # 패키지 호환성 문제로 임시 비활성화
+  # phone_state: ^3.0.0 # Temporarily disabled due to package compatibility issues
 
   # System overlay permissions
   system_alert_window: 2.0.7

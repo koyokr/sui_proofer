@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:phone_state/phone_state.dart';
 import 'package:system_alert_window/system_alert_window.dart';
+import 'utils/phone_number_utils.dart';
 
 class PhoneService {
   static final PhoneService _instance = PhoneService._internal();
@@ -27,10 +28,10 @@ class PhoneService {
   Future<bool> initialize() async {
     if (_isInitialized) return true;
 
-    // 먼저 권한이 있는지 확인
+    // First check if permission exists
     final hasPermission = await SystemAlertWindow.checkPermissions();
     if (hasPermission != true) {
-      // 권한이 없으면 요청
+      // Request permission if not available
       final overlayPermission = await SystemAlertWindow.requestPermissions();
       if (overlayPermission != true) {
         debugPrint('Overlay permission denied');
@@ -38,10 +39,10 @@ class PhoneService {
       }
     }
 
-    // 전화 상태 리스너 시작
+    // Start phone state listener
     _startPhoneStateListener();
 
-    // 오버레이 이벤트 리스너 등록
+    // Register overlay event listener
     _overlaySubscription = SystemAlertWindow.overlayListener.listen((event) {
       if (event.toString().contains('click') || event.toString().contains('touch')) {
         _hideCallOverlay();
@@ -58,9 +59,19 @@ class PhoneService {
     _phoneStateSubscription = PhoneState.stream.listen((PhoneState status) {
       debugPrint('[Phone] ${status.status} - ${status.number ?? 'Unknown'}');
 
-      // Unknown 번호는 모든 상태에서 무시
-      if (status.number == null || status.number == 'Unknown' || status.number == 'null' || status.number!.isEmpty) {
-        debugPrint('[Phone] Unknown 번호 무시');
+      // Check phone number validity with detailed logging
+      if (status.number == null) {
+        debugPrint('[Phone] Ignoring null number');
+        return;
+      }
+
+      final isValid = PhoneNumberUtils.isValidFormat(status.number!);
+      final normalized = PhoneNumberUtils.normalize(status.number!);
+
+      debugPrint('[Phone] Number validation: ${status.number} -> normalized: $normalized, valid: $isValid');
+
+      if (!isValid) {
+        debugPrint('[Phone] Ignoring invalid number: ${status.number}');
         return;
       }
 
@@ -69,15 +80,15 @@ class PhoneService {
           if (!_isOverlayShowing) {
             _callVerified = false;
             _currentCallNumber = status.number!;
-            debugPrint('[Phone] 새 전화 시작: $_currentCallNumber');
+            debugPrint('[Phone] New call started: $_currentCallNumber');
             _showIncomingCallOverlay(status.number!);
           }
           break;
         case PhoneStateStatus.CALL_ENDED:
           if (_currentCallNumber != null && _currentCallNumber == status.number) {
-            debugPrint('[Phone] 전화 종료 - 번호: $_currentCallNumber, 검증상태: $_callVerified');
-            // 단순히 로그만 출력
-            debugPrint('[Phone] 전화 종료 완료 - 검증상태: $_callVerified');
+            debugPrint('[Phone] Call ended - number: $_currentCallNumber, verification status: $_callVerified');
+            // Simply output log only
+            debugPrint('[Phone] Call end completed - verification status: $_callVerified');
             _hideCallOverlay();
             _currentCallNumber = null;
           }
@@ -93,23 +104,23 @@ class PhoneService {
     if (_isOverlayShowing) return;
 
     _isOverlayShowing = true;
-    debugPrint('[Overlay] 오버레이 표시: $phoneNumber');
+    debugPrint('[Overlay] Displaying overlay: $phoneNumber');
 
     try {
       await SystemAlertWindow.showSystemWindow(
         height: -1,
         width: -1,
         gravity: SystemWindowGravity.TOP,
-        notificationTitle: "수신 전화",
+        notificationTitle: "Sui Proofer - Incoming Call",
         notificationBody: phoneNumber,
         prefMode: SystemWindowPrefMode.OVERLAY,
         layoutParamFlags: [],
       );
 
       await SystemAlertWindow.sendMessageToOverlay('PHONE_NUMBER:$phoneNumber');
-      await SystemAlertWindow.sendMessageToOverlay('SMS_STATUS:대기중');
+      await SystemAlertWindow.sendMessageToOverlay('SMS_STATUS:Waiting');
     } catch (e) {
-      debugPrint('[Overlay] 오류: $e');
+      debugPrint('[Overlay] Error: $e');
       _isOverlayShowing = false;
     }
   }
@@ -121,23 +132,23 @@ class PhoneService {
     try {
       SystemAlertWindow.closeSystemWindow(prefMode: SystemWindowPrefMode.OVERLAY);
     } catch (e) {
-      debugPrint('[Overlay] 오류: $e');
+      debugPrint('[Overlay] Error: $e');
     }
     _isOverlayShowing = false;
   }
 
   void setCallVerified(bool verified, [String? phoneNumber]) {
     if (verified) {
-      // 전화번호가 전달되면 현재 전화번호 설정
+      // Set current phone number if phone number is provided
       if (phoneNumber != null && _currentCallNumber == null) {
         _currentCallNumber = phoneNumber;
-        debugPrint('[Phone] 현재 전화번호 설정: $_currentCallNumber');
+        debugPrint('[Phone] Current phone number set: $_currentCallNumber');
       }
 
       _callVerified = true;
-      debugPrint('[Phone] ★★★ SMS 검증 완료 - 번호: $_currentCallNumber, 상태: $_callVerified ★★★');
+      debugPrint('[Phone] ★★★ SMS verification completed - number: $_currentCallNumber, status: $_callVerified ★★★');
     } else {
-      debugPrint('[Phone] SMS 검증 실패 - verified: $verified, 번호: $_currentCallNumber');
+      debugPrint('[Phone] SMS verification failed - verified: $verified, number: $_currentCallNumber');
     }
   }
 

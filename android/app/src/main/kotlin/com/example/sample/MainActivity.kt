@@ -1,4 +1,4 @@
-package com.example.sample
+package com.suiproofer.app
 
 import io.flutter.embedding.android.FlutterActivity
 

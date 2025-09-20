@@ -6,27 +6,15 @@
       "Bash(flutter clean:*)",
       "Bash(flutter pub:*)",
       "Bash(flutter:*)",
-      "Bash(tasklist)",
-      "Bash(findstr:*)",
-      "Bash(timeout:*)",
-      "Bash(adb shell am force-stop:*)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:pub-web.flutter-io.cn)",
-      "mcp__dart__get_active_location",
       "WebFetch(domain:pub.dev)",
-      "mcp__dart__hot_reload",
-      "mcp__dart__connect_dart_tooling_daemon",
-      "mcp__dart__get_runtime_errors",
-      "mcp__dart__analyze_files",
       "WebFetch(domain:www.anthropic.com)",
-      "mcp__dart__pub_dev_search",
-      "mcp__dart__pub",
-      "mcp__dart__dart_fix",
       "Bash(dart fix:*)",
-      "Bash(adb:*)",
       "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "outputStyle": "default"
 }

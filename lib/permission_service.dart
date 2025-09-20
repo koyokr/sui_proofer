@@ -14,18 +14,18 @@ class PermissionService {
   ];
 
   Future<bool> requestAllPermissions(BuildContext context) async {
-    // 모든 권한을 한 페이지에서 요청
+    // Request all permissions on one page
     final shouldRequest = await _showPermissionOverview(context);
 
     if (!shouldRequest) return false;
 
-    // 모든 권한을 한 번에 요청
+    // Request all permissions at once
     await _requiredPermissions.request();
 
-    // 시스템 알림창 권한 요청
+    // Request system alert window permission
     await Permission.systemAlertWindow.request();
 
-    // 권한 상태 확인
+    // Check permission status
     bool allGranted = true;
     for (Permission permission in _requiredPermissions) {
       if (!await permission.isGranted) {
@@ -34,7 +34,7 @@ class PermissionService {
     }
 
     if (!allGranted && context.mounted) {
-      await _showSettingsDialog(context, "필수 권한");
+      await _showSettingsDialog(context, "Required Permissions");
     }
 
     return allGranted;
@@ -46,21 +46,21 @@ class PermissionService {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('앱 권한 허용'),
+          title: const Text('Allow App Permissions'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '이 앱이 정상적으로 작동하려면 다음 권한들이 필요합니다:',
+                  'The following permissions are required for this app to function properly:',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 ..._buildPermissionList(),
                 const SizedBox(height: 16),
                 const Text(
-                  '모든 권한을 한 번에 요청합니다. 일부 권한이 거부되면 설정에서 수동으로 허용해주세요.',
+                  'All permissions will be requested at once. If some permissions are denied, please allow them manually in settings.',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
@@ -68,11 +68,11 @@ class PermissionService {
           ),
           actions: [
             TextButton(
-              child: const Text('취소'),
+              child: const Text('Cancel'),
               onPressed: () => Navigator.of(context).pop(false),
             ),
             TextButton(
-              child: const Text('권한 허용'),
+              child: const Text('Allow Permissions'),
               onPressed: () => Navigator.of(context).pop(true),
             ),
           ],
@@ -83,11 +83,11 @@ class PermissionService {
 
   List<Widget> _buildPermissionList() {
     final permissions = [
-      {'icon': Icons.phone, 'name': '전화', 'desc': '수신 전화 감지'},
-      {'icon': Icons.message, 'name': 'SMS', 'desc': '문자 메시지 읽기'},
-      {'icon': Icons.contacts, 'name': '연락처', 'desc': '발신자 정보 표시'},
-      {'icon': Icons.notifications, 'name': '알림', 'desc': '알림 표시'},
-      {'icon': Icons.layers, 'name': '다른 앱 위에 표시', 'desc': '오버레이 표시'},
+      {'icon': Icons.phone, 'name': 'Phone', 'desc': 'Detect incoming calls'},
+      {'icon': Icons.message, 'name': 'SMS', 'desc': 'Read text messages'},
+      {'icon': Icons.contacts, 'name': 'Contacts', 'desc': 'Display caller information'},
+      {'icon': Icons.notifications, 'name': 'Notifications', 'desc': 'Display notifications'},
+      {'icon': Icons.layers, 'name': 'Display over other apps', 'desc': 'Display overlay'},
     ];
 
     return permissions.map((perm) => Padding(
@@ -123,15 +123,15 @@ class PermissionService {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('$permissionName 권한 필요'),
-          content: const Text('이 권한은 앱 설정에서 수동으로 허용해야 합니다. 설정으로 이동하시겠습니까?'),
+          title: Text('$permissionName Permission Required'),
+          content: const Text('This permission must be manually allowed in app settings. Would you like to go to settings?'),
           actions: <Widget>[
             TextButton(
-              child: const Text('취소'),
+              child: const Text('Cancel'),
               onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
-              child: const Text('설정으로 이동'),
+              child: const Text('Go to Settings'),
               onPressed: () {
                 Navigator.of(context).pop();
                 openAppSettings();
@@ -146,14 +146,14 @@ class PermissionService {
 
 
   Future<bool> checkAllPermissions() async {
-    // 필수 권한들만 체크
+    // Check only required permissions
     for (Permission permission in _requiredPermissions) {
       if (!await permission.isGranted) {
         return false;
       }
     }
 
-    // 시스템 오버레이 권한 체크
+    // Check system overlay permission
     if (!await Permission.systemAlertWindow.isGranted) {
       return false;
     }

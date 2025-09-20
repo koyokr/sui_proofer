@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'phone_service.dart';
 import 'custom_overlay.dart';
 import 'permission_service.dart';
+import 'config/app_constants.dart';
+import 'widgets/feature_card.dart';
 
 @pragma("vm:entry-point")
 void overlayMain() {
@@ -24,15 +26,15 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sui-king',
+      title: AppConstants.appTitle,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E3A8A),
+          seedColor: const Color(AppConstants.primaryColorValue),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Sui-king'),
+      home: const MyHomePage(title: AppConstants.appTitle),
     );
   }
 }
@@ -75,17 +77,17 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _checkAndRequestPermissions() async {
-    // 권한 확인
+    // Check permissions
     final hasPermissions = await _permissionService.checkAllPermissions();
 
     if (!hasPermissions) {
-      // 권한 요청 (context를 미리 저장)
+      // Request permissions (save context beforehand)
       if (mounted) {
         await _permissionService.requestAllPermissions(context);
       }
     }
 
-    // PhoneService 초기화
+    // Initialize PhoneService
     await _initializePhoneService();
 
   }
@@ -101,7 +103,7 @@ class _MyHomePageState extends State<MyHomePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('오버레이 권한이 필요합니다. 설정에서 권한을 허용해주세요.'),
+            content: const Text('Overlay permission is required. Please allow permission in settings.'),
             backgroundColor: Colors.red[400],
             behavior: SnackBarBehavior.floating,
           ),
@@ -114,13 +116,13 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A), // Dark crypto background
+      backgroundColor: AppColors.backgroundDark,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: ShaderMask(
           shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFF60A5FA), Color(0xFF34D399)],
+            colors: [AppColors.primaryBlue, AppColors.primaryGreen],
           ).createShader(bounds),
           child: Text(
             widget.title,
@@ -136,7 +138,7 @@ class _MyHomePageState extends State<MyHomePage> {
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () => setState(() {}),
-            tooltip: '화면 새로고침',
+            tooltip: 'Refresh screen',
           ),
         ],
       ),
@@ -148,24 +150,24 @@ class _MyHomePageState extends State<MyHomePage> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF0F172A),
-              Color(0xFF1E293B),
-              Color(0xFF334155),
+              AppColors.backgroundDark,
+              AppColors.surfaceDark,
+              AppColors.surfaceLight,
             ],
           ),
         ),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               minHeight: MediaQuery.of(context).size.height -
                          MediaQuery.of(context).padding.top -
-                         kToolbarHeight - 40, // AppBar 높이와 패딩 제외
+                         kToolbarHeight - 40, // Exclude AppBar height and padding
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-              // 상태 카드
+              // Status card
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -203,7 +205,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _serviceInitialized ? '시스템 활성화' : '설정 필요',
+                            _serviceInitialized ? 'System Active' : 'Setup Required',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -212,8 +214,8 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                           Text(
                             _serviceInitialized
-                                ? '모든 보안 기능이 활성화되었습니다'
-                                : '권한 설정을 완료해주세요',
+                                ? 'All security features are activated'
+                                : 'Please complete permission settings',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha:0.8),
                               fontSize: 14,
@@ -228,52 +230,155 @@ class _MyHomePageState extends State<MyHomePage> {
 
               const SizedBox(height: 24),
 
-              // 정보 카드
+              // Enhanced Verification System Dashboard
               Container(
-                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFF60A5FA).withValues(alpha:0.3),
-                    width: 1,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF1E293B).withValues(alpha: 0.95),
+                      const Color(0xFF334155).withValues(alpha: 0.8),
+                    ],
                   ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF60A5FA).withValues(alpha:0.4),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF60A5FA).withValues(alpha: 0.1),
+                      blurRadius: 20,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: const Color(0xFF60A5FA),
-                          size: 24,
+                    // Header Section
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF60A5FA).withValues(alpha: 0.15),
+                            const Color(0xFF34D399).withValues(alpha: 0.1),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          '실시간 검증 시스템',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF60A5FA), Color(0xFF3B82F6)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF60A5FA).withValues(alpha: 0.4),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.verified_user,
+                              color: Colors.white,
+                              size: 28,
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Security Verification',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Real-time SMS Protection System',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'ACTIVE',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    _buildInfoItem(
-                      '🔴 미검증 상태',
-                      '연락처에 없는 번호는 빨간색으로 표시됩니다',
-                    ),
-                    const SizedBox(height: 12),
-                    _buildInfoItem(
-                      '🟢 검증 완료',
-                      '실시간 문자 수신 시 초록색으로 변경됩니다',
-                    ),
-                    const SizedBox(height: 12),
-                    _buildInfoItem(
-                      '⚡ 실시간 감지',
-                      '전화 중 문자가 오면 즉시 화면에 표시됩니다',
+
+                    // Features Grid
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FeatureCard(
+                                  icon: Icons.shield_outlined,
+                                  title: 'Detection',
+                                  description: 'Unknown numbers monitored',
+                                  color: AppColors.errorRed,
+                                  isActive: true,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: FeatureCard(
+                                  icon: Icons.check_circle_outline,
+                                  title: 'Verification',
+                                  description: 'SMS validation active',
+                                  color: AppColors.successGreen,
+                                  isActive: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          FeatureCard(
+                            icon: Icons.flash_on,
+                            title: 'Real-time Processing',
+                            description: 'Instant SMS analysis during calls with live overlay display',
+                            color: AppColors.warningOrange,
+                            isActive: true,
+                            isWide: true,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -288,44 +393,4 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
 
-  Widget _buildInfoItem(String title, String description) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 6,
-          height: 6,
-          margin: const EdgeInsets.only(top: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF60A5FA),
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                description,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha:0.7),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 }

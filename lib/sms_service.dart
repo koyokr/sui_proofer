@@ -1,6 +1,30 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer';
+import 'package:http/http.dart' as http;
 import 'package:smswatcher/smswatcher.dart';
+import 'config/app_constants.dart';
+import 'utils/phone_number_utils.dart';
+
+class SuiVerificationResult {
+  final bool isValid;
+  final String? objectAddress;
+  final String? submitterAddress;
+  final String? interestedProduct;
+  final String? consentCollector;
+  final String? consultationTopic;
+  final String? timestamp;
+
+  SuiVerificationResult({
+    required this.isValid,
+    this.objectAddress,
+    this.submitterAddress,
+    this.interestedProduct,
+    this.consentCollector,
+    this.consultationTopic,
+    this.timestamp,
+  });
+}
 
 class SmsMessage {
   final String address;
@@ -22,7 +46,7 @@ class SmsMessage {
       address: sms['sender'] ?? sms['address'] ?? '',
       body: sms['body'] ?? sms['message'] ?? '',
       date: DateTime.tryParse(sms['date']?.toString() ?? '') ?? DateTime.now(),
-      isIncoming: sms['type'] != 'sent', // smswatcher에서 받은 SMS는 기본적으로 incoming
+      isIncoming: sms['type'] != 'sent', // SMS received from smswatcher is incoming by default
       id: sms['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
     );
   }
@@ -42,22 +66,22 @@ class SmsService {
   Stream<SmsMessage>? _smsStream;
   StreamSubscription? _smsWatcherSubscription;
 
-  /// SMS 스트림 가져오기
+  /// Get SMS stream
   Stream<SmsMessage> get smsStream {
     _smsStreamController ??= StreamController<SmsMessage>.broadcast();
     _smsStream ??= _smsStreamController!.stream;
 
-    // SMS 감지 시작
+    // Start SMS detection
     _startSmsMonitoring();
     return _smsStream!;
   }
 
-  /// 특정 전화번호의 SMS 기록 가져오기 (발신자가 나에게 보낸 것만)
-  Future<List<SmsMessage>> getSmsHistory(String phoneNumber, {int limit = 10}) async {
+  /// Get SMS history for specific phone number (only from sender to me)
+  Future<List<SmsMessage>> getSmsHistory(String phoneNumber, {int limit = AppConstants.defaultHistoryLimit}) async {
     try {
       log('[SMS Service] Getting SMS history from caller: $phoneNumber');
 
-      // smswatcher로 모든 SMS 가져오기
+      // Get all SMS with smswatcher
       final smswatcher = Smswatcher();
       final allSms = await smswatcher.getAllSMS();
 
@@ -66,32 +90,22 @@ class SmsService {
         return [];
       }
 
-      // 전화번호 정규화
-      String normalizePhone(String phone) {
-        return phone.replaceAll(RegExp(r'[\s\-\(\)\+]'), '').replaceAll('82', '0');
-      }
-
-      final normalizedTarget = normalizePhone(phoneNumber);
+      final normalizedTarget = PhoneNumberUtils.normalize(phoneNumber);
       log('[SMS Service] Normalized target: $normalizedTarget');
 
-      // 해당 번호에서 나에게 온 SMS만 필터링 (발신자만)
+      // Filter only SMS from that number to me (sender only)
       final filteredSms = allSms.where((sms) {
         final sender = sms['sender'] ?? sms['address'] ?? '';
-        final normalizedSender = normalizePhone(sender);
-
-        // 발신자 번호가 타겟 번호와 일치하는지 확인
-        bool isMatch = normalizedSender.endsWith(normalizedTarget.substring(normalizedTarget.length > 4 ? normalizedTarget.length - 4 : 0)) ||
-                      normalizedTarget.endsWith(normalizedSender.substring(normalizedSender.length > 4 ? normalizedSender.length - 4 : 0)) ||
-                      normalizedSender == normalizedTarget;
+        final isMatch = PhoneNumberUtils.isMatching(sender, phoneNumber);
 
         if (isMatch) {
-          log('[SMS Service] Found matching SMS from: $sender (normalized: $normalizedSender)');
+          log('[SMS Service] Found matching SMS from: $sender');
         }
 
         return isMatch;
       }).toList();
 
-      // 날짜순 정렬 (최신순)
+      // Sort by date (newest first)
       filteredSms.sort((a, b) {
         final dateA = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime.now();
         final dateB = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime.now();
@@ -108,8 +122,8 @@ class SmsService {
     }
   }
 
-  /// 모든 SMS 가져오기 (최근 순)
-  Future<List<SmsMessage>> getAllSms({int limit = 50}) async {
+  /// Get all SMS (recent first)
+  Future<List<SmsMessage>> getAllSms({int limit = AppConstants.defaultSmsLimit}) async {
     try {
       log('[SMS Service] Getting all SMS messages');
 
@@ -128,27 +142,173 @@ class SmsService {
     }
   }
 
-  /// SMS에서 URL 링크 추출
-  List<String> extractUrlsFromText(String text) {
-    log('[SMS Service] Extracting URLs from text: $text');
+  /// Extract Sui object addresses with timestamps from SMS
+  List<Map<String, String>> extractSuiAddressesFromText(String text) {
+    log('[SMS Service] Extracting Sui addresses with timestamps from text: $text');
 
-    // URL 패턴 정규식 - http(s), www, 일반 도메인 패턴 모두 포함
-    final urlPattern = RegExp(
-      r'(https?://[^\s]+|www\.[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+[^\s]*)',
+    // New pattern: 0x[a-fA-F0-9]{64}_\d+ (no parentheses)
+    final suiPattern = RegExp(
+      r'0x[a-fA-F0-9]{64}_\d+',
       caseSensitive: false,
     );
 
-    final matches = urlPattern.allMatches(text);
-    final urls = matches.map((match) => match.group(0)!).toList();
+    final matches = suiPattern.allMatches(text);
+    final addressData = matches.map((match) {
+      final fullMatch = match.group(0)!;
+      // Split by underscore to get address and timestamp
+      final parts = fullMatch.split('_');
 
-    // 중복 제거
-    final uniqueUrls = urls.toSet().toList();
+      return {
+        'address': parts.isNotEmpty ? parts[0] : '',
+        'timestamp': parts.length > 1 ? parts[1] : '',
+      };
+    }).toList();
 
-    log('[SMS Service] Extracted ${uniqueUrls.length} URLs: $uniqueUrls');
-    return uniqueUrls;
+    // Remove duplicates based on address
+    final uniqueData = <String, Map<String, String>>{};
+    for (final data in addressData) {
+      if (data['address']!.isNotEmpty) {
+        uniqueData[data['address']!] = data;
+      }
+    }
+
+    final result = uniqueData.values.toList();
+    log('[SMS Service] Extracted ${result.length} Sui address-timestamp pairs: $result');
+    return result;
   }
 
-  /// SMS 모니터링 시작
+  /// Verify Sui object address by calling Sui API with timestamp matching
+  Future<SuiVerificationResult> verifySuiAddressWithDetails(String address, String timestamp) async {
+    try {
+      log('[SMS Service] ===== STARTING VERIFICATION =====');
+      log('[SMS Service] Verifying Sui address: $address');
+      log('[SMS Service] Target timestamp: $timestamp');
+
+      const expectedSubmitter = '0x8b89d808ce6e1c5a560354c264f7ff4166e05d138b8534fcae78058acfe298f4';
+
+      final response = await http.post(
+        Uri.parse('https://fullnode.testnet.sui.io'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'sui_getObject',
+          'params': [
+            address,
+            {'showContent': true}
+          ]
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        log('[SMS Service] HTTP error ${response.statusCode}: ${response.body}');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      final jsonData = jsonDecode(response.body) as Map<String, dynamic>;
+
+      // Check if response has expected structure
+      if (!jsonData.containsKey('result')) {
+        log('[SMS Service] No result field in response');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      final result = jsonData['result'] as Map<String, dynamic>?;
+      if (result == null || !result.containsKey('data')) {
+        log('[SMS Service] No data field in result');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      final data = result['data'] as Map<String, dynamic>?;
+      if (data == null || !data.containsKey('content')) {
+        log('[SMS Service] No content field in data');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      final content = data['content'] as Map<String, dynamic>?;
+      if (content == null || !content.containsKey('fields')) {
+        log('[SMS Service] No fields field in content');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      final fields = content['fields'] as Map<String, dynamic>?;
+      if (fields == null || !fields.containsKey('forms')) {
+        log('[SMS Service] No forms field in fields');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      final forms = fields['forms'] as List<dynamic>?;
+      if (forms == null || forms.isEmpty) {
+        log('[SMS Service] Forms list is empty or null');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      log('[SMS Service] Found ${forms.length} forms in response');
+
+      // Find form with matching timestamp (search from end for latest entries)
+      Map<String, dynamic>? matchingForm;
+      for (int i = forms.length - 1; i >= 0; i--) {
+        final form = forms[i];
+        final formMap = form as Map<String, dynamic>?;
+        if (formMap != null && formMap.containsKey('fields')) {
+          final fields = formMap['fields'] as Map<String, dynamic>?;
+          if (fields != null && fields.containsKey('timestamp')) {
+            final formTimestamp = fields['timestamp']?.toString();
+            log('[SMS Service] Checking form $i: timestamp=$formTimestamp vs target=$timestamp');
+            if (formTimestamp == timestamp) {
+              log('[SMS Service] ✅ FOUND MATCHING FORM at index $i');
+              matchingForm = fields;
+              break;
+            }
+          }
+        }
+      }
+
+      if (matchingForm == null) {
+        log('[SMS Service] No form found with matching timestamp: $timestamp');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      // Check submitter in matching form
+      if (!matchingForm.containsKey('submitter')) {
+        log('[SMS Service] Matching form has no submitter field');
+        return SuiVerificationResult(isValid: false);
+      }
+
+      final submitter = matchingForm['submitter'] as String?;
+      final isValid = submitter == expectedSubmitter;
+
+      log('[SMS Service] Submitter: $submitter, Expected: $expectedSubmitter, Valid: $isValid');
+
+      // Extract additional form data
+      final interestedProduct = matchingForm['interested_product']?.toString();
+      final consentCollector = matchingForm['consent_collector']?.toString();
+      final consultationTopic = matchingForm['consultation_topic']?.toString();
+
+      return SuiVerificationResult(
+        isValid: isValid,
+        objectAddress: address,
+        submitterAddress: submitter,
+        interestedProduct: interestedProduct,
+        consentCollector: consentCollector,
+        consultationTopic: consultationTopic,
+        timestamp: timestamp,
+      );
+
+    } catch (e) {
+      log('[SMS Service] Error verifying Sui address: $e');
+      return SuiVerificationResult(isValid: false);
+    }
+  }
+
+  /// Verify Sui object address by calling Sui API (backward compatibility)
+  Future<bool> verifySuiAddress(String address) async {
+    // For backward compatibility, use empty timestamp
+    final result = await verifySuiAddressWithDetails(address, '');
+    return result.isValid;
+  }
+
+  /// Start SMS monitoring
   void _startSmsMonitoring() {
     if (_smsWatcherSubscription != null) return;
 
@@ -161,12 +321,12 @@ class SmsService {
 
         final message = SmsMessage.fromSmsWatcher(smsData);
 
-        // URL 추출 및 로깅
-        final urls = extractUrlsFromText(message.body);
-        if (urls.isNotEmpty) {
-          log('[SMS URL] Found URLs in SMS from ${message.address}:');
-          for (String url in urls) {
-            log('[SMS URL] - $url');
+        // Sui address extraction and logging
+        final addressData = extractSuiAddressesFromText(message.body);
+        if (addressData.isNotEmpty) {
+          log('[SMS Sui] Found Sui address-timestamp pairs in SMS from ${message.address}:');
+          for (final data in addressData) {
+            log('[SMS Sui] - Address: ${data['address']}, Timestamp: ${data['timestamp']}');
           }
         }
 
@@ -177,7 +337,7 @@ class SmsService {
     });
   }
 
-  /// SMS 모니터링 중지
+  /// Stop SMS monitoring
   void stopSmsMonitoring() {
     _smsWatcherSubscription?.cancel();
     _smsWatcherSubscription = null;
